@@ -23,15 +23,14 @@ Players take turns guessing numbers. When a number is guessed, any active player
 
 ## ✨ Features
 
-- **🌐 Multi-Device Online Room Mode:** Host a lobby with a custom Room Code (e.g. `LNS-4821`), share the invite link with 2–10 players, have everyone enter their name and secretly lock in their number on their own device, and the host starts the match!
-- **📱 Pass & Play Mode (Single Device):** Play together on one phone/tablet using pass-the-device privacy screens.
-- **🔢 Live Interactive Number Tracker:** Interactive matrix grid ($1$ to $\text{Max}$) tracking all available vs. guessed numbers in real-time. Tap any available number to autofill your guess!
-- **📜 Turn-by-Turn Guess Feed:** Live history feed tracking rounds, turns, guessers, and elimination events.
-- **🔗 Smart Invite Links & QR / Share:** One-click copy and mobile sharing for room invite links.
-- **Self-Guess Prevention:** Safeguard against self-elimination.
-- **Duplicate Secret Numbers & Guess Prevention:** Full support for identical secret numbers and rejection of repeated guesses.
-- **Automatic Turn Skipping & Winner Detection:** Auto-skips eliminated players and triggers confetti when only 1 survivor remains.
-- **100% Client-Side Serverless P2P:** Zero backend or database required.
+- **🌐 Multi-Device Online Room Mode:** Host creates a room, selects player count (2–10) and custom number limit (e.g. 1–20, 1–40, 1–50, 1–100, or any custom range).
+- **🔗 Direct Room Invite Links:** Shared links open directly on the room join screen so players can enter their name and secretly lock in their number on their own device.
+- **🔢 Live Interactive Number Tracker:** Matrix grid tracking all available vs. guessed numbers in real time. Tapping any available number autofills your guess.
+- **🎯 Live Guess Banner:** Real-time feedback (`Rahul guessed 17`) shown directly on top of the number board.
+- **🔴 Red Elimination Highlighting:** Eliminated players are prominently displayed with bold solid red badges and cards in the player list.
+- **⚡ Instant Turn Progression:** Fast direct gameplay without confirmation blockers.
+- **100% Client-Side Serverless P2P:** Works on local Wi-Fi / LAN with zero backend or database required.
+
 
 
 
