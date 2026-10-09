@@ -63,6 +63,9 @@ function renderApp(container, state) {
     case SCREENS.ROOM_LOBBY_WAITING:
       screenContent = renderClientLobbyWaitingScreen(state);
       break;
+    case SCREENS.ROOM_RESTART_SETUP:
+      screenContent = renderRoomRestartSetupScreen(state);
+      break;
     case SCREENS.GUESSING:
       screenContent = renderGuessingScreen(state);
       break;
@@ -416,7 +419,8 @@ function renderHostLobbyScreen(state) {
   const roomCode = state.roomCode || 'LNS-ROOM';
   const players = state.players || [];
   const targetCount = state.playerCount || 4;
-  const canStart = players.length >= 2;
+  const readyCount = players.filter(p => p.ready).length;
+  const canStart = players.length >= 2 && players.every(p => p.ready);
 
   let playerSlotsHtml = '';
   for (let i = 0; i < targetCount; i++) {
@@ -433,9 +437,11 @@ function renderHostLobbyScreen(state) {
               ${p.isHost ? '<span class="text-[9px] bg-amber-950 text-amber-300 px-1 py-0.2 rounded border border-amber-800">HOST</span>' : ''}
             </div>
           </div>
-          <span class="text-xs font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-            ✓ Ready
-          </span>
+          ${
+            p.ready
+              ? '<span class="text-xs font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">✓ Ready</span>'
+              : '<span class="text-xs font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40 animate-pulse">⏳ Picking Number...</span>'
+          }
         </div>
       `;
     } else {
@@ -447,7 +453,7 @@ function renderHostLobbyScreen(state) {
             </span>
             <span class="text-xs italic">Waiting for player ${i + 1} to join...</span>
           </div>
-          <span class="text-xs text-slate-500">⏳ Waiting</span>
+          <span class="text-xs text-slate-500">⏳ Empty Slot</span>
         </div>
       `;
     }
@@ -464,7 +470,7 @@ function renderHostLobbyScreen(state) {
       <!-- Share Box -->
       <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-800 mb-4 flex items-center justify-between gap-2">
         <div class="text-xs text-slate-300">
-          Players: <strong class="text-emerald-400 font-bold">${players.length} / ${targetCount} Ready</strong>
+          Players: <strong class="text-emerald-400 font-bold">${readyCount} / ${players.length} Ready</strong> (${targetCount} Max)
         </div>
         <button id="btn-lobby-invite" class="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 font-bold text-xs flex items-center gap-1 transition cursor-pointer">
           <span>🔗</span> Copy Invite Link
@@ -479,13 +485,22 @@ function renderHostLobbyScreen(state) {
       <!-- Start Match Button -->
       <button
         id="btn-host-start-match"
-        class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition ${
-          canStart ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'
+        class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition mb-3 ${
+          canStart ? 'cursor-pointer shadow-lg shadow-blue-600/20' : 'opacity-40 cursor-not-allowed'
         }"
         ${canStart ? '' : 'disabled'}
       >
-        ${canStart ? 'START GAME 🚀' : `Waiting for Players (${players.length}/${targetCount})...`}
+        ${canStart ? 'START GAME 🚀' : `Waiting for all players to pick numbers (${readyCount}/${players.length} ready)...`}
       </button>
+
+      <div class="flex items-center gap-2">
+        <button id="btn-host-change-secret" class="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs border border-slate-800 transition cursor-pointer">
+          Change Secret Number ✏️
+        </button>
+        <button id="btn-leave-room-lobby" class="py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-red-400 font-semibold text-xs border border-slate-800 transition cursor-pointer">
+          Leave Room 🚪
+        </button>
+      </div>
     </div>
   `;
 }
@@ -497,6 +512,7 @@ function renderClientLobbyWaitingScreen(state) {
   const roomCode = state.roomCode || 'LNS-ROOM';
   const players = state.players || [];
   const targetCount = state.playerCount || 4;
+  const readyCount = players.filter(p => p.ready).length;
 
   let playerSlotsHtml = '';
   players.forEach((p, idx) => {
@@ -514,7 +530,11 @@ function renderClientLobbyWaitingScreen(state) {
             ${isMe ? '<span class="text-[10px] text-blue-400 bg-blue-950 px-1 py-0.2 rounded ml-1 font-normal">You</span>' : ''}
           </div>
         </div>
-        <span class="text-xs font-bold text-emerald-400">✓ Ready</span>
+        ${
+          p.ready
+            ? '<span class="text-xs font-bold text-emerald-400">✓ Ready</span>'
+            : '<span class="text-xs font-bold text-amber-400 animate-pulse">⏳ Choosing...</span>'
+        }
       </div>
     `;
   });
@@ -536,16 +556,147 @@ function renderClientLobbyWaitingScreen(state) {
       <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 mb-4 text-left">
         <div class="flex items-center justify-between mb-2 text-xs font-bold text-slate-400">
           <span>Players in Room</span>
-          <span class="text-emerald-400">${players.length} / ${targetCount}</span>
+          <span class="text-emerald-400">${readyCount} / ${players.length} Ready</span>
         </div>
         <div class="space-y-1.5">
           ${playerSlotsHtml}
         </div>
       </div>
 
-      <div class="text-xs text-slate-500">
+      <div class="text-xs text-slate-500 mb-4">
         The match will begin automatically on this screen when the Host clicks Start!
       </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btn-client-change-secret" class="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs border border-slate-800 transition cursor-pointer">
+          Change Secret Number ✏️
+        </button>
+        <button id="btn-leave-room-waiting" class="py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-red-400 font-semibold text-xs border border-slate-800 transition cursor-pointer">
+          Leave Room 🚪
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Screen 8: Room Rematch / Restart Setup Screen
+ * Prompts Host and each connected player to select their secret number for the new game in the same room.
+ */
+function renderRoomRestartSetupScreen(state) {
+  const roomCode = state.roomCode || 'LNS-ROOM';
+  const currentMax = state.maxNumber || 40;
+  const isHost = state.isHost;
+  const myPlayer = state.players.find(p => (isHost ? p.isHost : p.networkId === state.myPlayerId)) || { name: state.myPlayerName || 'Player' };
+
+  // If host, provide option to keep or adjust range presets
+  const limitPresets = [20, 30, 40, 50, 100];
+  const limitPresetButtons = limitPresets
+    .map(
+      lim => `
+      <button
+        type="button"
+        data-limit="${lim}"
+        class="btn-select-rematch-limit px-2.5 py-1 rounded-md font-mono text-xs border transition cursor-pointer ${
+          lim === currentMax
+            ? 'bg-blue-600/30 border-blue-500 text-blue-300 font-bold'
+            : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white'
+        }"
+      >
+        1–${lim}
+      </button>
+    `
+    )
+    .join('');
+
+  return `
+    <div class="animate-fade-in max-w-md mx-auto w-full game-card p-6 rounded-2xl border border-slate-800">
+      <div class="text-center mb-5">
+        <span class="text-xs font-bold text-blue-400 tracking-wider uppercase">Same Room Rematch</span>
+        <h2 class="text-2xl font-bold text-white font-display">New Game Setup</h2>
+        <p class="text-xs text-slate-400 mt-1">
+          Room <strong class="text-blue-400 font-mono">${roomCode}</strong> • Choose your secret number for this round
+        </p>
+      </div>
+
+      <div class="bg-slate-900 p-3 rounded-xl border border-slate-800 mb-4 flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-base">${isHost ? '👑' : '🎮'}</span>
+          <span class="text-slate-300">Player: <strong class="text-white">${escapeHtml(myPlayer.name || (isHost ? 'Host' : 'You'))}</strong></span>
+        </div>
+        <span class="text-[10px] bg-blue-950 text-blue-300 border border-blue-800 px-2 py-0.5 rounded font-bold uppercase">
+          ${isHost ? 'Host' : 'Connected'}
+        </span>
+      </div>
+
+      <form id="form-rematch-setup" class="space-y-4">
+        ${
+          isHost
+            ? `
+              <!-- Host Limit Customization (Optional) -->
+              <div class="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <div class="flex items-center justify-between mb-1.5">
+                  <label for="rematch-max-number-input" class="text-xs font-bold uppercase tracking-wider text-slate-300">
+                    Number Limit (1 to Max):
+                  </label>
+                  <span class="text-xs font-mono font-bold text-emerald-400">1 – ${currentMax}</span>
+                </div>
+                <input
+                  type="number"
+                  id="rematch-max-number-input"
+                  min="10"
+                  max="1000"
+                  step="1"
+                  value="${currentMax}"
+                  class="w-full p-2 mb-2 bg-slate-950 font-mono font-bold text-white text-center rounded-lg border border-slate-800 focus:border-blue-500 outline-none text-sm"
+                />
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[10px] text-slate-500 uppercase font-bold">Presets:</span>
+                  ${limitPresetButtons}
+                </div>
+              </div>
+            `
+            : ''
+        }
+
+        <!-- Secret Number Input -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="rematch-secret-input" class="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Your Secret Number:
+            </label>
+            <span id="rematch-range-badge" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded">
+              Valid: 1–${currentMax}
+            </span>
+          </div>
+          <input
+            type="number"
+            id="rematch-secret-input"
+            min="1"
+            max="${currentMax}"
+            required
+            autofocus
+            placeholder="Pick number (1–${currentMax})"
+            class="w-full p-3 text-center text-2xl font-bold bg-slate-900 text-white rounded-xl border border-slate-800 focus:border-blue-500 outline-none"
+          />
+          <div id="rematch-secret-error" class="hidden mt-2 text-xs font-semibold text-red-400 bg-red-950/60 border border-red-800 p-2 rounded-lg text-center"></div>
+        </div>
+
+        <button
+          type="submit"
+          class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition cursor-pointer"
+        >
+          Lock In Secret Number & Ready ✓
+        </button>
+
+        <button
+          type="button"
+          id="btn-leave-room-rematch"
+          class="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold border border-slate-800 transition cursor-pointer"
+        >
+          Leave Room 🚪
+        </button>
+      </form>
     </div>
   `;
 }
@@ -894,14 +1045,38 @@ function renderWinnerScreen(state) {
         </div>
       </div>
 
-      <div class="flex flex-col sm:flex-row gap-2.5">
-        <button id="btn-play-again" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition cursor-pointer">
-          Play Again 🔄
-        </button>
-        <button id="btn-winner-home" class="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition cursor-pointer">
-          Home
-        </button>
-      </div>
+      ${
+        state.roomCode
+          ? `
+            <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 mb-4 text-xs text-slate-300">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-slate-400">Room:</span>
+                <strong class="text-blue-400 font-mono font-bold text-sm">${state.roomCode}</strong>
+              </div>
+              <p class="text-[11px] text-slate-400">
+                ${state.isHost ? 'Restart to start a new match in this room. Everyone will pick a new secret number!' : 'Play another match with everyone in this room!'}
+              </p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2.5">
+              <button id="btn-room-restart" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition cursor-pointer shadow-lg shadow-blue-600/20">
+                ${state.isHost ? 'Restart Game (Same Room) 🔄' : 'Play Again in Room 🔄'}
+              </button>
+              <button id="btn-leave-room-winner" class="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition cursor-pointer">
+                Leave Room 🚪
+              </button>
+            </div>
+          `
+          : `
+            <div class="flex flex-col sm:flex-row gap-2.5">
+              <button id="btn-play-again" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition cursor-pointer">
+                Play Again 🔄
+              </button>
+              <button id="btn-winner-home" class="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition cursor-pointer">
+                Home
+              </button>
+            </div>
+          `
+      }
     </div>
   `;
 }
@@ -1244,7 +1419,96 @@ function attachEventListeners(container, state) {
     }
   }
 
-  // Winner Screen
+  // Rematch Setup Screen: Preset limit buttons
+  const rematchLimitBtns = container.querySelectorAll('.btn-select-rematch-limit');
+  rematchLimitBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const limit = btn.getAttribute('data-limit');
+      GameActions.setMaxNumber(limit);
+      const maxInput = container.querySelector('#rematch-max-number-input');
+      if (maxInput) maxInput.value = limit;
+      const badge = container.querySelector('#rematch-range-badge');
+      if (badge) badge.textContent = `Valid: 1–${limit}`;
+      const secretInput = container.querySelector('#rematch-secret-input');
+      if (secretInput) secretInput.max = limit;
+    });
+  });
+
+  // Rematch Setup Screen: Custom max limit input
+  const rematchMaxInput = container.querySelector('#rematch-max-number-input');
+  if (rematchMaxInput) {
+    rematchMaxInput.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val >= 10) {
+        GameActions.setMaxNumber(val);
+        const badge = container.querySelector('#rematch-range-badge');
+        if (badge) badge.textContent = `Valid: 1–${val}`;
+        const secretInput = container.querySelector('#rematch-secret-input');
+        if (secretInput) secretInput.max = val;
+      }
+    });
+  }
+
+  // Rematch Setup Form Submit
+  const rematchForm = container.querySelector('#form-rematch-setup');
+  if (rematchForm) {
+    rematchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const secret = container.querySelector('#rematch-secret-input').value;
+      const customMaxInput = container.querySelector('#rematch-max-number-input');
+      const customMax = customMaxInput ? customMaxInput.value : null;
+      const errorBox = container.querySelector('#rematch-secret-error');
+      const result = GameActions.submitRematchSecret(secret, customMax);
+      if (!result.valid && errorBox) {
+        errorBox.textContent = result.error;
+        errorBox.classList.remove('hidden');
+      }
+    });
+  }
+
+  // Lobby: Change Secret Number buttons
+  const hostChangeSecretBtn = container.querySelector('#btn-host-change-secret');
+  if (hostChangeSecretBtn) {
+    hostChangeSecretBtn.addEventListener('click', () => {
+      sounds.playClick();
+      store.setState({ screen: SCREENS.ROOM_RESTART_SETUP });
+    });
+  }
+  const clientChangeSecretBtn = container.querySelector('#btn-client-change-secret');
+  if (clientChangeSecretBtn) {
+    clientChangeSecretBtn.addEventListener('click', () => {
+      sounds.playClick();
+      store.setState({ screen: SCREENS.ROOM_RESTART_SETUP });
+    });
+  }
+
+  // Lobby & Rematch: Leave Room buttons
+  const leaveRoomLobbyBtn = container.querySelector('#btn-leave-room-lobby');
+  if (leaveRoomLobbyBtn) {
+    leaveRoomLobbyBtn.addEventListener('click', () => GameActions.goToHome());
+  }
+  const leaveRoomWaitingBtn = container.querySelector('#btn-leave-room-waiting');
+  if (leaveRoomWaitingBtn) {
+    leaveRoomWaitingBtn.addEventListener('click', () => GameActions.goToHome());
+  }
+  const leaveRoomRematchBtn = container.querySelector('#btn-leave-room-rematch');
+  if (leaveRoomRematchBtn) {
+    leaveRoomRematchBtn.addEventListener('click', () => GameActions.goToHome());
+  }
+  const leaveRoomWinnerBtn = container.querySelector('#btn-leave-room-winner');
+  if (leaveRoomWinnerBtn) {
+    leaveRoomWinnerBtn.addEventListener('click', () => GameActions.goToHome());
+  }
+
+  // Room Restart button from Winner Screen
+  const roomRestartBtn = container.querySelector('#btn-room-restart');
+  if (roomRestartBtn) {
+    roomRestartBtn.addEventListener('click', () => {
+      GameActions.restartRoomGame();
+    });
+  }
+
+  // Offline / Single winner buttons
   const playAgainBtn = container.querySelector('#btn-play-again');
   if (playAgainBtn) {
     playAgainBtn.addEventListener('click', () => {

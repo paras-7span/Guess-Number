@@ -322,6 +322,59 @@ class NetworkManager {
           }
           break;
         }
+
+        case 'REQUEST_ROOM_RESTART': {
+          // Client requested to restart in same room
+          import('./game.js').then(({ GameActions }) => {
+            GameActions.restartRoomGame();
+          });
+          break;
+        }
+
+        case 'PLAYER_REMATCH_READY': {
+          const state = store.getState();
+          const secret = Number(data.secretNumber);
+          if (!Number.isInteger(secret) || secret < 1 || secret > state.maxNumber) {
+            const rejectMsg = {
+              type: 'JOIN_REJECTED',
+              networkId: data.networkId,
+              reason: `Your secret number (${data.secretNumber}) is out of range! The number limit is 1–${state.maxNumber}.`,
+              maxNumber: state.maxNumber
+            };
+            if (senderConn) senderConn.send(rejectMsg);
+            this.sendBroadcast(rejectMsg);
+            return;
+          }
+
+          const updatedPlayers = state.players.map(p => {
+            if (p.networkId === data.networkId) {
+              return {
+                ...p,
+                secretNumber: secret,
+                ready: true,
+                active: true,
+                eliminatedInRound: null
+              };
+            }
+            return p;
+          });
+
+          sounds.playConfirm();
+          triggerHaptic('light');
+
+          store.setState({ players: updatedPlayers });
+          this.broadcastLobbyState(updatedPlayers, state.playerCount, state.maxNumber);
+          break;
+        }
+
+        case 'PLAYER_LEAVE': {
+          const state = store.getState();
+          const updatedPlayers = state.players.filter(p => p.networkId !== data.networkId);
+          this.connections.delete(data.networkId);
+          store.setState({ players: updatedPlayers });
+          this.broadcastLobbyState(updatedPlayers, state.playerCount, state.maxNumber);
+          break;
+        }
       }
     } else {
       // CLIENT HANDLERS
@@ -331,11 +384,11 @@ class NetworkManager {
             sounds.playMiss();
             triggerHaptic('heavy');
             store.setState({
-              screen: SCREENS.ROOM_JOIN_SETUP,
+              screen: store.getState().screen === SCREENS.ROOM_RESTART_SETUP ? SCREENS.ROOM_RESTART_SETUP : SCREENS.ROOM_JOIN_SETUP,
               maxNumber: data.maxNumber || store.getState().maxNumber
             });
             setTimeout(() => {
-              const errorBox = document.querySelector('#join-validation-error');
+              const errorBox = document.querySelector('#join-validation-error') || document.querySelector('#rematch-secret-error');
               if (errorBox) {
                 errorBox.textContent = data.reason || 'Secret number out of range!';
                 errorBox.classList.remove('hidden');
@@ -351,11 +404,11 @@ class NetworkManager {
               maxNumber: data.maxNumber,
               playerCount: data.playerCount
             });
-            const rangeBadge = document.querySelector('#join-range-badge');
+            const rangeBadge = document.querySelector('#join-range-badge') || document.querySelector('#rematch-range-badge');
             if (rangeBadge) {
               rangeBadge.textContent = `Host Range: 1–${data.maxNumber}`;
             }
-            const secretInput = document.querySelector('#join-secret-input');
+            const secretInput = document.querySelector('#join-secret-input') || document.querySelector('#rematch-secret-input');
             if (secretInput) {
               secretInput.max = data.maxNumber;
               secretInput.placeholder = `Pick number (1–${data.maxNumber})`;
@@ -375,6 +428,37 @@ class NetworkManager {
               secretNumber: p.networkId === this.myPlayerId ? store.getState().myPlayerSecret : null
             }))
           });
+          break;
+        }
+
+        case 'ROOM_RESTART_ROUND': {
+          sounds.playConfirm();
+          store.setState({
+            guessedNumbers: [],
+            round: 1,
+            turnCount: 0,
+            lastGuessResult: null,
+            winner: null,
+            myPlayerSecret: null,
+            maxNumber: data.maxNumber || store.getState().maxNumber,
+            players: (data.players || store.getState().players).map(p => ({
+              ...p,
+              ready: false,
+              active: true,
+              eliminatedInRound: null,
+              secretNumber: null
+            })),
+            screen: SCREENS.ROOM_RESTART_SETUP
+          });
+          break;
+        }
+
+        case 'HOST_LEFT_ROOM': {
+          sounds.playMiss();
+          alert('The host has left or closed the room.');
+          this.leaveRoom();
+          store.reset();
+          store.setState({ screen: SCREENS.HOME });
           break;
         }
 
@@ -607,6 +691,119 @@ class NetworkManager {
       this.hostConnection.send(payload);
     }
     this.sendBroadcast(payload);
+  }
+
+  /**
+   * Host broadcasts restart of round in same room
+   */
+  broadcastRoomRestart(players, maxNumber) {
+    const sanitizedPlayers = players.map(p => ({
+      id: p.id,
+      networkId: p.networkId,
+      name: p.name,
+      isHost: p.isHost,
+      ready: false,
+      active: true,
+      eliminatedInRound: null
+    }));
+
+    this.broadcastToAll({
+      type: 'ROOM_RESTART_ROUND',
+      maxNumber,
+      players: sanitizedPlayers
+    });
+  }
+
+  /**
+   * Client requests room restart
+   */
+  clientRequestRestart() {
+    const payload = {
+      type: 'REQUEST_ROOM_RESTART',
+      networkId: this.myPlayerId
+    };
+    if (this.hostConnection && this.hostConnection.open) {
+      this.hostConnection.send(payload);
+    }
+    this.sendBroadcast(payload);
+  }
+
+  /**
+   * Client sends rematch secret number to host
+   */
+  clientSendRematchSecret(secretNumber) {
+    const payload = {
+      type: 'PLAYER_REMATCH_READY',
+      networkId: this.myPlayerId,
+      secretNumber
+    };
+    if (this.hostConnection && this.hostConnection.open) {
+      this.hostConnection.send(payload);
+    }
+    this.sendBroadcast(payload);
+  }
+
+  /**
+   * Leave room and clean up networking
+   */
+  leaveRoom() {
+    if (this.isHost) {
+      this.broadcastToAll({ type: 'HOST_LEFT_ROOM' });
+    } else {
+      if (this.hostConnection && this.hostConnection.open) {
+        this.hostConnection.send({
+          type: 'PLAYER_LEAVE',
+          networkId: this.myPlayerId
+        });
+      }
+      this.sendBroadcast({
+        type: 'PLAYER_LEAVE',
+        networkId: this.myPlayerId
+      });
+    }
+
+    // Close connections
+    for (const conn of this.connections.values()) {
+      if (conn && conn.close) {
+        try {
+          conn.close();
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    this.connections.clear();
+
+    if (this.hostConnection && this.hostConnection.close) {
+      try {
+        this.hostConnection.close();
+      } catch (e) {
+        // ignore
+      }
+      this.hostConnection = null;
+    }
+
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.close();
+      } catch (e) {
+        // ignore
+      }
+      this.broadcastChannel = null;
+    }
+
+    if (this.peer && !this.peer.destroyed) {
+      try {
+        this.peer.destroy();
+      } catch (e) {
+        // ignore
+      }
+      this.peer = null;
+    }
+
+    this.isHost = false;
+    this.myPlayerId = null;
+    this.roomCode = null;
   }
 }
 

@@ -169,8 +169,110 @@ export const GameActions = {
       alert('Need at least 2 players in the room to start the game!');
       return;
     }
+    const unreadyPlayers = state.players.filter(p => !p.ready || p.secretNumber === null || p.secretNumber === undefined);
+    if (unreadyPlayers.length > 0) {
+      alert(`Waiting for ${unreadyPlayers.map(p => p.name).join(', ')} to choose their secret number!`);
+      return;
+    }
     sounds.playConfirm();
     network.hostStartGame();
+  },
+
+  /**
+   * Restart game in the same room, prompting each player to enter a new secret number
+   */
+  restartRoomGame() {
+    sounds.playClick();
+    const state = store.getState();
+
+    if (state.isHost) {
+      const resetPlayers = state.players.map(p => ({
+        ...p,
+        ready: false,
+        active: true,
+        eliminatedInRound: null,
+        secretNumber: null
+      }));
+
+      store.setState({
+        screen: SCREENS.ROOM_RESTART_SETUP,
+        guessedNumbers: [],
+        round: 1,
+        turnCount: 0,
+        lastGuessResult: null,
+        winner: null,
+        myPlayerSecret: null,
+        players: resetPlayers
+      });
+
+      network.broadcastRoomRestart(resetPlayers, state.maxNumber);
+    } else {
+      network.clientRequestRestart();
+    }
+  },
+
+  /**
+   * Submit new secret number for a rematch in the same room
+   */
+  submitRematchSecret(secretVal, updatedMaxNumber = null) {
+    const state = store.getState();
+    let maxNum = state.maxNumber || 40;
+    if (state.isHost && updatedMaxNumber) {
+      const parsedMax = parseInt(updatedMaxNumber, 10);
+      if (!isNaN(parsedMax) && parsedMax >= 10) {
+        maxNum = parsedMax;
+        store.setState({ maxNumber: maxNum });
+      }
+    }
+
+    const validation = validateSecretNumberInput(secretVal, maxNum);
+    if (!validation.valid) {
+      return validation;
+    }
+
+    sounds.playConfirm();
+
+    if (state.isHost) {
+      const updatedPlayers = state.players.map(p => {
+        if (p.isHost || p.networkId === state.myPlayerId) {
+          return {
+            ...p,
+            secretNumber: validation.number,
+            ready: true,
+            active: true,
+            eliminatedInRound: null
+          };
+        }
+        return p;
+      });
+
+      store.setState({
+        myPlayerSecret: validation.number,
+        players: updatedPlayers,
+        screen: SCREENS.ROOM_LOBBY
+      });
+
+      network.broadcastLobbyState(updatedPlayers, state.playerCount, maxNum);
+    } else {
+      store.setState({
+        myPlayerSecret: validation.number,
+        screen: SCREENS.ROOM_LOBBY_WAITING
+      });
+
+      network.clientSendRematchSecret(validation.number);
+    }
+
+    return { valid: true };
+  },
+
+  /**
+   * Leave room and clean up peer connections
+   */
+  leaveRoom() {
+    sounds.playClick();
+    network.leaveRoom();
+    store.reset();
+    store.setState({ screen: SCREENS.HOME });
   },
 
   /**
@@ -308,11 +410,16 @@ export const GameActions = {
    * Reset game for "Play Again"
    */
   playAgain() {
-    sounds.playClick();
-    store.reset();
-    store.setState({
-      screen: SCREENS.HOME
-    });
+    const state = store.getState();
+    if (state.roomCode) {
+      this.restartRoomGame();
+    } else {
+      sounds.playClick();
+      store.reset();
+      store.setState({
+        screen: SCREENS.HOME
+      });
+    }
   },
 
   /**
@@ -320,8 +427,15 @@ export const GameActions = {
    */
   goToHome() {
     sounds.playClick();
-    store.reset();
-    store.setState({ screen: SCREENS.HOME });
+    const state = store.getState();
+    if (state.roomCode) {
+      const confirmLeave = confirm('Are you sure you want to leave the game room?');
+      if (!confirmLeave) return;
+      this.leaveRoom();
+    } else {
+      store.reset();
+      store.setState({ screen: SCREENS.HOME });
+    }
   },
 
   /**
