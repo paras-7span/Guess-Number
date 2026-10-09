@@ -272,6 +272,20 @@ class NetworkManager {
             return;
           }
 
+          // Check if another player in the room has already chosen this number
+          const existingPlayerWithSameSecret = state.players.find(p => p.ready && p.secretNumber === secret && p.networkId !== data.networkId);
+          if (existingPlayerWithSameSecret) {
+            const rejectMsg = {
+              type: 'JOIN_REJECTED',
+              networkId: data.networkId,
+              reason: `Number ${secret} is already chosen by ${existingPlayerWithSameSecret.name}! Please select a different secret number.`,
+              maxNumber: state.maxNumber
+            };
+            if (senderConn) senderConn.send(rejectMsg);
+            this.sendBroadcast(rejectMsg);
+            return;
+          }
+
           if (senderConn) {
             this.connections.set(data.networkId, senderConn);
           }
@@ -339,6 +353,20 @@ class NetworkManager {
               type: 'JOIN_REJECTED',
               networkId: data.networkId,
               reason: `Your secret number (${data.secretNumber}) is out of range! The number limit is 1–${state.maxNumber}.`,
+              maxNumber: state.maxNumber
+            };
+            if (senderConn) senderConn.send(rejectMsg);
+            this.sendBroadcast(rejectMsg);
+            return;
+          }
+
+          // Check for duplicate secret number among other ready players
+          const duplicatePlayer = state.players.find(p => p.ready && p.secretNumber === secret && p.networkId !== data.networkId);
+          if (duplicatePlayer) {
+            const rejectMsg = {
+              type: 'JOIN_REJECTED',
+              networkId: data.networkId,
+              reason: `Number ${secret} is already taken by ${duplicatePlayer.name}! Please pick a different secret number.`,
               maxNumber: state.maxNumber
             };
             if (senderConn) senderConn.send(rejectMsg);

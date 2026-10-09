@@ -174,6 +174,23 @@ export const GameActions = {
       alert(`Waiting for ${unreadyPlayers.map(p => p.name).join(', ')} to choose their secret number!`);
       return;
     }
+
+    // Check for duplicate secret numbers
+    const seen = new Map();
+    const duplicatePairs = [];
+    for (const p of state.players) {
+      if (seen.has(p.secretNumber)) {
+        duplicatePairs.push(`"${seen.get(p.secretNumber).name}" & "${p.name}" both picked #${p.secretNumber}`);
+      } else {
+        seen.set(p.secretNumber, p);
+      }
+    }
+
+    if (duplicatePairs.length > 0) {
+      alert(`⚠️ Duplicate secret numbers found!\n\n${duplicatePairs.join('\n')}\n\nEach player must have a unique secret number. Please have them select a different number before starting.`);
+      return;
+    }
+
     sounds.playConfirm();
     network.hostStartGame();
   },
@@ -230,9 +247,15 @@ export const GameActions = {
       return validation;
     }
 
-    sounds.playConfirm();
-
     if (state.isHost) {
+      // Check if another ready player already picked this secret number
+      const duplicatePlayer = state.players.find(p => !p.isHost && p.ready && p.secretNumber === validation.number);
+      if (duplicatePlayer) {
+        return { valid: false, error: `Number ${validation.number} is already taken by ${duplicatePlayer.name}! Please select a different secret number.` };
+      }
+
+      sounds.playConfirm();
+
       const updatedPlayers = state.players.map(p => {
         if (p.isHost || p.networkId === state.myPlayerId) {
           return {
@@ -254,6 +277,7 @@ export const GameActions = {
 
       network.broadcastLobbyState(updatedPlayers, state.playerCount, maxNum);
     } else {
+      sounds.playConfirm();
       store.setState({
         myPlayerSecret: validation.number,
         screen: SCREENS.ROOM_LOBBY_WAITING

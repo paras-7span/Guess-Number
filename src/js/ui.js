@@ -1195,7 +1195,7 @@ function renderRulesModal() {
             <ul class="list-disc list-inside space-y-1">
               <li>You cannot guess your own secret number.</li>
               <li>Previously guessed numbers cannot be guessed again.</li>
-              <li>Duplicate secret numbers are allowed (both eliminated if guessed!).</li>
+              <li>Every player must pick a unique secret number (no duplicates allowed in the room).</li>
             </ul>
           </div>
         </div>
