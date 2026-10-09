@@ -716,6 +716,11 @@ function renderGuessingScreen(state) {
     (!state.isHost && currentPlayer.networkId === state.myPlayerId)
   );
 
+  const myPlayer = state.players.find(p => (
+    (state.isHost && p.isHost) || (!state.isHost && p.networkId === state.myPlayerId)
+  ));
+  const mySecretNumber = state.myPlayerSecret || (myPlayer ? myPlayer.secretNumber : null);
+
   // Render players status cards (Bold Red for Eliminated Players!)
   let playersListHtml = '';
   state.players.forEach(p => {
@@ -736,7 +741,7 @@ function renderGuessingScreen(state) {
           <div class="flex items-center gap-2 truncate">
             <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
             <span class="truncate">${escapeHtml(p.name)}</span>
-            ${isMe ? '<span class="text-[9px] text-blue-300 bg-blue-950 px-1 rounded border border-blue-800">You</span>' : ''}
+            ${isMe ? `<span class="text-[9px] text-blue-300 bg-blue-950 px-1 rounded border border-blue-800 font-bold font-mono">You (Secret: #${mySecretNumber})</span>` : ''}
             ${isCurrent ? '<span class="text-[9px] text-blue-400 bg-blue-950 px-1 py-0.2 rounded font-bold uppercase">Turn</span>' : ''}
           </div>
           <span class="text-emerald-400 font-bold text-[11px] shrink-0">● Active</span>
@@ -749,7 +754,7 @@ function renderGuessingScreen(state) {
           <div class="flex items-center gap-2 truncate line-through opacity-85">
             <span class="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0"></span>
             <span class="truncate">${escapeHtml(p.name)}</span>
-            ${isMe ? '<span class="text-[9px] text-red-400 bg-red-950 px-1 rounded border border-red-800 no-underline">You</span>' : ''}
+            ${isMe ? `<span class="text-[9px] text-red-400 bg-red-950 px-1 rounded border border-red-800 font-bold font-mono no-underline">You (Secret: #${mySecretNumber})</span>` : ''}
           </div>
           <span class="text-red-400 font-black text-[11px] shrink-0 uppercase tracking-wider">✕ Eliminated</span>
         </div>
@@ -761,6 +766,7 @@ function renderGuessingScreen(state) {
   let numberGridHtml = '';
   for (let num = 1; num <= maxNumber; num++) {
     const isGuessed = guessedList.includes(num);
+    const isMySecret = mySecretNumber === num;
 
     if (isGuessed) {
       const matchLog = state.historyLog.find(h => h.guessedNumber === num);
@@ -770,7 +776,7 @@ function renderGuessingScreen(state) {
         <button
           type="button"
           disabled
-          title="Number ${num} was guessed in Round ${matchLog ? matchLog.round : '?'}${causedElimination ? ' (Eliminated player!)' : ''}"
+          title="Number ${num} was guessed in Round ${matchLog ? matchLog.round : '?'}${causedElimination ? ' (Eliminated player!)' : ''}${isMySecret ? ' (Your Secret Number)' : ''}"
           class="aspect-square flex flex-col items-center justify-center rounded-lg font-mono font-bold text-xs border ${
             causedElimination
               ? 'bg-red-950/80 border-red-600 text-red-300 line-through'
@@ -787,11 +793,17 @@ function renderGuessingScreen(state) {
           type="button"
           data-number="${num}"
           ${!isMyTurn ? 'disabled' : ''}
-          class="btn-pick-number aspect-square flex items-center justify-center rounded-lg font-mono font-bold text-xs bg-slate-900 hover:bg-blue-600 hover:text-white text-slate-200 border border-slate-800 hover:border-blue-400 transition ${
+          title="${isMySecret ? `Your Secret Number (#${num}) - Cannot guess yourself` : `Pick number ${num}`}"
+          class="btn-pick-number aspect-square flex flex-col items-center justify-center rounded-lg font-mono font-bold text-xs ${
+            isMySecret
+              ? 'bg-blue-950/90 border-blue-500 text-blue-300 ring-1 ring-blue-500/50'
+              : 'bg-slate-900 hover:bg-blue-600 hover:text-white text-slate-200 border border-slate-800 hover:border-blue-400'
+          } transition ${
             isMyTurn ? 'cursor-pointer active:scale-95' : 'cursor-default opacity-80'
           }"
         >
-          ${num}
+          <span>${num}</span>
+          ${isMySecret ? '<span class="text-[7px] text-blue-400 font-sans font-bold leading-none">YOU</span>' : ''}
         </button>
       `;
     }
@@ -928,6 +940,28 @@ function renderGuessingScreen(state) {
                 </div>
               `
           }
+        </div>
+
+        <!-- My Private Secret Number Reference Card -->
+        <div class="game-card p-3.5 rounded-2xl border border-blue-600/40 bg-gradient-to-r from-blue-950/50 via-slate-900 to-slate-900 flex items-center justify-between shadow-sm">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/40 flex items-center justify-center text-lg">
+              🔒
+            </div>
+            <div>
+              <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block leading-tight">
+                Your Secret Number
+              </span>
+              <span class="text-[11px] text-slate-300">
+                Visible only to you (Keep secret!)
+              </span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-mono text-xl font-black px-3.5 py-1 rounded-xl bg-blue-600 text-white shadow-md border border-blue-400/60 tracking-wider">
+              ${mySecretNumber !== null && mySecretNumber !== undefined ? mySecretNumber : '—'}
+            </span>
+          </div>
         </div>
 
         <!-- Player Status List (Showing Eliminated Players in Red) -->
