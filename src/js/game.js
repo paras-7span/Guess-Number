@@ -171,23 +171,23 @@ export const GameActions = {
     }
     const unreadyPlayers = state.players.filter(p => !p.ready || p.secretNumber === null || p.secretNumber === undefined);
     if (unreadyPlayers.length > 0) {
-      alert(`Waiting for ${unreadyPlayers.map(p => p.name).join(', ')} to choose their secret number!`);
+      alert('Waiting for all players to choose their secret number!');
       return;
     }
 
-    // Check for duplicate secret numbers
-    const seen = new Map();
-    const duplicatePairs = [];
+    // Check for duplicate secret numbers without revealing anyone's secret numbers
+    const seen = new Set();
+    let hasDuplicate = false;
     for (const p of state.players) {
       if (seen.has(p.secretNumber)) {
-        duplicatePairs.push(`"${seen.get(p.secretNumber).name}" & "${p.name}" both picked #${p.secretNumber}`);
-      } else {
-        seen.set(p.secretNumber, p);
+        hasDuplicate = true;
+        break;
       }
+      seen.add(p.secretNumber);
     }
 
-    if (duplicatePairs.length > 0) {
-      alert(`⚠️ Duplicate secret numbers found!\n\n${duplicatePairs.join('\n')}\n\nEach player must have a unique secret number. Please have them select a different number before starting.`);
+    if (hasDuplicate) {
+      alert('Duplicate number selected! Please choose a different secret number before starting.');
       return;
     }
 
@@ -251,7 +251,7 @@ export const GameActions = {
       // Check if another ready player already picked this secret number
       const duplicatePlayer = state.players.find(p => !p.isHost && p.ready && p.secretNumber === validation.number);
       if (duplicatePlayer) {
-        return { valid: false, error: `Number ${validation.number} is already taken by ${duplicatePlayer.name}! Please select a different secret number.` };
+        return { valid: false, error: 'This number is already chosen! Please select a different number.' };
       }
 
       sounds.playConfirm();

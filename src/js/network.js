@@ -278,7 +278,7 @@ class NetworkManager {
             const rejectMsg = {
               type: 'JOIN_REJECTED',
               networkId: data.networkId,
-              reason: `Number ${secret} is already chosen by ${existingPlayerWithSameSecret.name}! Please select a different secret number.`,
+              reason: 'This number is already chosen! Please select a different number.',
               maxNumber: state.maxNumber
             };
             if (senderConn) senderConn.send(rejectMsg);
@@ -366,7 +366,7 @@ class NetworkManager {
             const rejectMsg = {
               type: 'JOIN_REJECTED',
               networkId: data.networkId,
-              reason: `Number ${secret} is already taken by ${duplicatePlayer.name}! Please pick a different secret number.`,
+              reason: 'This number is already chosen! Please select a different number.',
               maxNumber: state.maxNumber
             };
             if (senderConn) senderConn.send(rejectMsg);
